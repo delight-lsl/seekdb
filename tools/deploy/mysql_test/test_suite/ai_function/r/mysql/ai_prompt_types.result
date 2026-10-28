@@ -1,0 +1,55 @@
+set names utf8mb4;
+select json_type(json_extract(ai_prompt('{0}', json_object('nested',json_array(1,true,null))), '$.args[0]')) as argument_type;
+argument_type
+OBJECT
+select json_extract(ai_prompt('{0}', json_array(1,true,null)), '$.args[0]') = json_array(1,true,null) as array_preserved;
+array_preserved
+1
+select json_type(json_extract(ai_prompt('{0}', cast('true' as json)), '$.args[0]')) as argument_type;
+argument_type
+BOOLEAN
+select json_type(json_extract(ai_prompt('{0}', cast('null' as json)), '$.args[0]')) as argument_type;
+argument_type
+NULL
+select json_type(json_extract(ai_prompt('{0}', '{"key":1}'), '$.args[0]')) as argument_type;
+argument_type
+STRING
+select json_type(json_extract(ai_prompt('{0}', ai_prompt('inner {0}', json_array('hello',1))), '$.args[0]')) as argument_type;
+argument_type
+OBJECT
+select json_unquote(json_extract(ai_prompt('{0}', ai_prompt('inner {0}', 'hello')), '$.args[0].template')) as inner_template;
+inner_template
+inner {0}
+select json_unquote(json_extract(ai_prompt('{0}/{0}/{9}', 'x'), '$.template')) as template_preserved;
+template_preserved
+{0}/{0}/{9}
+select hex(json_unquote(json_extract(ai_prompt('{0}', json_object('text','你好\n"\\')), '$.args[0].text'))) as escaped_text;
+escaped_text
+E4BDA0E5A5BD0A225C
+select hex(json_unquote(json_extract(ai_prompt('你好\0', '\0'), '$.template'))) as template_bytes;
+template_bytes
+E4BDA0E5A5BD00
+select hex(json_unquote(json_extract(ai_prompt('你好\0', '\0'), '$.args[0]'))) as argument_bytes;
+argument_bytes
+00
+drop table if exists ai_prompt_lob_types;
+create table ai_prompt_lob_types(id int primary key, t longtext, a text, b longtext, j json);
+insert into ai_prompt_lob_types values(1, concat(repeat('x',70000),'{0}'), '世界', repeat('y',80000), '{"nested":[1,true,null]}');
+select length(json_unquote(json_extract(ai_prompt(t,a,b,j), '$.template'))) as template_length, length(json_unquote(json_extract(ai_prompt(t,a,b,j), '$.args[1]'))) as argument_length from ai_prompt_lob_types where id=1;
+template_length	argument_length
+70003	80000
+select json_unquote(json_extract(ai_prompt(a,b), '$.template')) as text_template, json_type(json_extract(ai_prompt(t,a,b,j), '$.args[2]')) as json_argument_type from ai_prompt_lob_types where id=1;
+text_template	json_argument_type
+世界	OBJECT
+insert into ai_prompt_lob_types(id) values(2);
+select ai_prompt(t) from ai_prompt_lob_types where id=2;
+ERROR HY000: Invalid argument
+select ai_prompt('template',a) from ai_prompt_lob_types where id=2;
+ERROR 22000: Invalid data type for the operation
+drop table ai_prompt_lob_types;
+select ai_prompt(1);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('{0}',1);
+ERROR 22000: Invalid data type for the operation
+select ai_prompt('');
+ERROR HY000: Invalid argument
