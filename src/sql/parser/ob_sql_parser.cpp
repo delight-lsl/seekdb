@@ -374,7 +374,7 @@ bool read_parquet_file(const std::string &path, std::vector<std::string> &column
       "    print(json.dumps([row.get(name) for name in names], ensure_ascii=False, default=str))\n";
   const std::string python = python_env != NULL && python_env[0] != '\0'
                            ? python_env
-                           : "/root/anaconda3/bin/python3";
+                           : "python3";
   const std::string command = (helper_env != NULL && helper_env[0] != '\0')
                             ? shell_quote(python) + " " + shell_quote(helper_env) + " " +
                                 shell_quote(path) + " 2>/dev/null"
