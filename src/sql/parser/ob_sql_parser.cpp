@@ -364,12 +364,22 @@ bool read_parquet_file(const std::string &path, std::vector<std::string> &column
 {
   const char *helper_env = std::getenv("OB_FILE_SQL_PARQUET_HELPER");
   const char *python_env = std::getenv("OB_FILE_SQL_PARQUET_PYTHON");
-  const std::string helper = helper_env != NULL && helper_env[0] != '\0'
-                           ? helper_env
-                           : "/root/ryh/seekdb-ai/source/tools/file_sql/parquet_to_json.py";
+  std::string helper = helper_env != NULL && helper_env[0] != '\0' ? helper_env : "";
+  if (helper.empty()) {
+    const std::string parser_file(__FILE__);
+    const std::string parser_suffix("src/sql/parser/ob_sql_parser.cpp");
+    const size_t parser_pos = parser_file.rfind(parser_suffix);
+    if (parser_pos != std::string::npos) {
+      helper = parser_file.substr(0, parser_pos) + "tools/file_sql/parquet_to_json.py";
+    }
+    std::ifstream helper_file(helper.c_str());
+    if (helper.empty() || !helper_file.good()) {
+      helper = "tools/file_sql/parquet_to_json.py";
+    }
+  }
   const std::string python = python_env != NULL && python_env[0] != '\0'
                            ? python_env
-                           : "/root/anaconda3/bin/python3";
+                           : "python3";
   const std::string command = shell_quote(python) + " " + shell_quote(helper) +
                               " " + shell_quote(path) + " 2>/dev/null";
   FILE *pipe = popen(command.c_str(), "r");
