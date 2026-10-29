@@ -18,6 +18,7 @@
 
 #include "ob_sql_parser.h"
 #include "sql/parser/parse_node.h"
+#include "sql/parser/ob_file_sql_parquet_script.h"
 #include "sql/parser/parse_malloc.h"
 #include "share/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -364,14 +365,7 @@ bool read_parquet_file(const std::string &path, std::vector<std::string> &column
 {
   const char *helper_env = std::getenv("OB_FILE_SQL_PARQUET_HELPER");
   const char *python_env = std::getenv("OB_FILE_SQL_PARQUET_PYTHON");
-  const std::string script =
-      "import json, sys\n"
-      "import pyarrow.parquet as parquet\n"
-      "table = parquet.read_table(sys.argv[1])\n"
-      "names = list(table.column_names)\n"
-      "print(json.dumps(names, ensure_ascii=False))\n"
-      "for row in table.to_pylist():\n"
-      "    print(json.dumps([row.get(name) for name in names], ensure_ascii=False, default=str))\n";
+  const std::string script(OB_FILE_SQL_PARQUET_SCRIPT);
   const std::string python = python_env != NULL && python_env[0] != '\0'
                            ? python_env
                            : "python3";
@@ -597,7 +591,7 @@ bool rewrite_file_table(const std::string &sql, std::string &rewritten)
   } else if (function == "read_json(" || function == "read_ndjson(") {
     if (!read_json_lines(path, columns, rows)) return false;
   } else if (function == "read_parquet(") {
-    // Parquet must be decoded by the pyarrow helper.  Do not synthesize rows
+    // Parquet must be decoded by the helper.  Do not synthesize rows
     // when the helper is unavailable: that would silently return incorrect
     // results for a valid but different Parquet file.
     if (!read_parquet_file(path, columns, rows)) return false;
