@@ -364,24 +364,22 @@ bool read_parquet_file(const std::string &path, std::vector<std::string> &column
 {
   const char *helper_env = std::getenv("OB_FILE_SQL_PARQUET_HELPER");
   const char *python_env = std::getenv("OB_FILE_SQL_PARQUET_PYTHON");
-  std::string helper = helper_env != NULL && helper_env[0] != '\0' ? helper_env : "";
-  if (helper.empty()) {
-    const std::string parser_file(__FILE__);
-    const std::string parser_suffix("src/sql/parser/ob_sql_parser.cpp");
-    const size_t parser_pos = parser_file.rfind(parser_suffix);
-    if (parser_pos != std::string::npos) {
-      helper = parser_file.substr(0, parser_pos) + "tools/file_sql/parquet_to_json.py";
-    }
-    std::ifstream helper_file(helper.c_str());
-    if (helper.empty() || !helper_file.good()) {
-      helper = "tools/file_sql/parquet_to_json.py";
-    }
-  }
+  const std::string script =
+      "import json, sys\n"
+      "import pyarrow.parquet as parquet\n"
+      "table = parquet.read_table(sys.argv[1])\n"
+      "names = list(table.column_names)\n"
+      "print(json.dumps(names, ensure_ascii=False))\n"
+      "for row in table.to_pylist():\n"
+      "    print(json.dumps([row.get(name) for name in names], ensure_ascii=False, default=str))\n";
   const std::string python = python_env != NULL && python_env[0] != '\0'
                            ? python_env
-                           : "python3";
-  const std::string command = shell_quote(python) + " " + shell_quote(helper) +
-                              " " + shell_quote(path) + " 2>/dev/null";
+                           : "/root/anaconda3/bin/python3";
+  const std::string command = (helper_env != NULL && helper_env[0] != '\0')
+                            ? shell_quote(python) + " " + shell_quote(helper_env) + " " +
+                                shell_quote(path) + " 2>/dev/null"
+                            : shell_quote(python) + " -c " + shell_quote(script) + " " +
+                                shell_quote(path) + " 2>/dev/null";
   FILE *pipe = popen(command.c_str(), "r");
   if (NULL == pipe) return false;
   char buffer[8192];
