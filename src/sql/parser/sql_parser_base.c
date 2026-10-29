@@ -15,6 +15,9 @@
  */
 
 #include "sql_parser_base.h"
+
+extern int ob_rewrite_file_sql(ParseResult *result, const char *sql, size_t len,
+                               const char **out_ptr, size_t *out_len);
 #include "ob_parser_charset_utils.h"
 
 #define YY_EXTRA_TYPE void *
@@ -74,7 +77,13 @@ int parse_sql(ParseResult *p, const char *buf, size_t input_len)
     snprintf(p->error_msg_, MAX_ERROR_MSG, "Input SQL can not be empty");
     ret = OB_PARSER_ERR_EMPTY_QUERY;
   } else {
-    const int32_t len = (int32_t)input_len;
+    const char *parse_buf = buf;
+    size_t parse_len = input_len;
+    if (OB_PARSER_SUCCESS != (ret = ob_rewrite_file_sql(p, buf, input_len, &parse_buf, &parse_len))) {
+      return ret;
+    }
+    const int32_t len = (int32_t)parse_len;
+    buf = parse_buf;
     p->input_sql_ = buf;
     p->input_sql_len_ = len;
     p->start_col_ = 1;
