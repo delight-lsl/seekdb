@@ -61,6 +61,42 @@ int ObOpenAIUtils::ObOpenAIComplete::get_header(common::ObIAllocator &allocator,
   return ObOpenAIUtils::get_header(allocator, api_key, headers);
 }
 
+// "system" is a message role, not a request parameter: lift it into the system message and keep
+// it out of the body that is sent to the provider.
+static int ob_ai_extract_system_prompt(common::ObIAllocator &allocator,
+                                       common::ObJsonObject *config,
+                                       common::ObString &prompt,
+                                       common::ObString &system_prompt,
+                                       common::ObJsonObject *&request_config)
+{
+  int ret = OB_SUCCESS;
+  system_prompt = prompt;
+  request_config = config;
+  if (OB_NOT_NULL(config)) {
+    common::ObJsonNode *system_node = config->get_value(ObString::make_string("system"));
+    if (OB_NOT_NULL(system_node) && common::ObJsonNodeType::J_STRING == system_node->json_type()) {
+      const ObString system_str = static_cast<common::ObJsonString *>(system_node)->get_str();
+      if (system_prompt.empty() && !system_str.empty()) {
+        ret = ob_write_string(allocator, system_str, system_prompt);
+      }
+      if (OB_SUCC(ret)) {
+        ret = ObAIFuncJsonUtils::get_json_object(allocator, request_config);
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < config->element_count(); ++i) {
+        ObString key;
+        ObJsonNode *node = config->get_value(i);
+        if (OB_ISNULL(node)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(config->get_key(i, key))) {
+        } else if (0 != key.case_compare("system") &&
+                   OB_FAIL(request_config->add(key, node))) {
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObOpenAIUtils::ObOpenAIComplete::get_body(common::ObIAllocator &allocator,
                                               common::ObString &model,
                                               common::ObString &prompt,
@@ -76,12 +112,16 @@ int ObOpenAIUtils::ObOpenAIComplete::get_body(common::ObIAllocator &allocator,
     ObJsonObject *body_obj = nullptr;
     ObJsonString *model_str = nullptr;
     ObJsonArray *messages_array = nullptr;
-    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
+    ObString system_prompt;
+    ObJsonObject *request_config = nullptr;
+    if (OB_FAIL(ob_ai_extract_system_prompt(allocator, config, prompt, system_prompt,
+                                            request_config))) {
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
-    } else if (OB_FAIL(construct_messages_array(allocator, prompt, content, messages_array))) {
+    } else if (OB_FAIL(construct_messages_array(allocator, system_prompt, content, messages_array))) {
     } else if (OB_FAIL(body_obj->add("messages", messages_array))) {
-    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
+    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, request_config, body_obj))) {
     } else {
       body = body_obj;
     }
