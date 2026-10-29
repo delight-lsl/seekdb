@@ -33,6 +33,9 @@ namespace
 // path. The charset objects are stable once initialized, so cache the handle.
 inline const ObCharsetInfo *get_collation_info(const ObCollationType cs_type)
 {
+  if (OB_UNLIKELY(cs_type <= CS_TYPE_INVALID || cs_type >= CS_TYPE_MAX)) {
+    return nullptr;
+  }
   static std::atomic<const ObCharsetInfo *> cached[CS_TYPE_MAX];
   const ObCharsetInfo *cs = cached[cs_type].load(std::memory_order_relaxed);
   if (OB_ISNULL(cs)) {
