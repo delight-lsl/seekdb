@@ -1274,6 +1274,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarPushJoinPredicate)
         + sizeof(ObSysVarObSparseDropRatioSearch)
         + sizeof(ObSysVarEnableFileSql)
+        + sizeof(ObSysVarAiColumnStrictRead)
         ;
     void *ptr = NULL;
     if (OB_ISNULL(ptr = allocator_.alloc(total_mem_size))) {
