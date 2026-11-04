@@ -1036,6 +1036,13 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
     const int64_t original_parallelism,
     int64_t &decided_parallelism)
 {
+  // A fulltext index build spends most of its time generating one word row per
+  // token, which parallelizes well, but it inherited the same one-third rule as
+  // ordinary indexes. Since the session default for DDL parallelism is 1, that
+  // rule collapsed the build to a single thread. Keep the rule, but give the
+  // fulltext index and doc-word tables a floor so the build uses more than one
+  // thread unless the machine genuinely has only one core to give.
+  constexpr int64_t FTS_INDEX_BUILD_MIN_PARALLELISM = 4;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(original_parallelism <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1045,9 +1052,11 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         decided_parallelism = MAX(original_parallelism, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
+        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        break;
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        decided_parallelism = MAX(original_parallelism / 3, FTS_INDEX_BUILD_MIN_PARALLELISM);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:

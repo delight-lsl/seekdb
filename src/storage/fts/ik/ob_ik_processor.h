@@ -103,6 +103,13 @@ public:
 
   int process(TokenizeContext &ctx);
 
+  // Same as process(), but the caller already fetched the current character, so
+  // the per-character lookups are not repeated once per segmenter.
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
+
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
                          const uint8_t char_len,

@@ -400,10 +400,22 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
+  // Try the range that served the previous character first. Walking the ranges
+  // linearly costs a boundary memcmp per range on every character of every
+  // token, and the range only changes when the text moves to another lead
+  // character, so this removes almost all of those comparisons.
+  const int64_t cached = cached_range_idx_;
+  if (OB_LIKELY(cached >= 0 && cached < range_dicts_.size())
+      && ft_utf8mb4_bin_cmp(range_dicts_[cached].start_.get_word(), single_word) <= 0
+      && ft_utf8mb4_bin_cmp(range_dicts_[cached].end_.get_word(), single_word) >= 0) {
+    dict = range_dicts_[cached].dict_;
+    found = true;
+  }
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
     if (ft_utf8mb4_bin_cmp(range_dicts_[i].start_.get_word(), single_word) <= 0
         && ft_utf8mb4_bin_cmp(range_dicts_[i].end_.get_word(), single_word) >= 0) {
       dict = range_dicts_[i].dict_;
+      cached_range_idx_ = i;
       found = true;
     }
   }

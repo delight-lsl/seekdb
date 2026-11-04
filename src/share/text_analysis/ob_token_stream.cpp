@@ -293,11 +293,20 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     } else if (OB_UNLIKELY(!found_alnum)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObString norm_alnum_token(norm_token_len, norm_token_ptr);
-      ObString norm_lower_token;
-      if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+      bool need_lowercase = false;
+      for (uint32_t i = 0; !need_lowercase && i < norm_token_len; ++i) {
+        const unsigned char ch = static_cast<unsigned char>(norm_token_ptr[i]);
+        need_lowercase = ch >= 0x80 || (ch >= 'A' && ch <= 'Z');
+      }
+      if (!need_lowercase) {
+        next_token.set_string(norm_token_ptr, norm_token_len);
       } else {
-        next_token.set_string(norm_lower_token);
+        ObString norm_alnum_token(norm_token_len, norm_token_ptr);
+        ObString norm_lower_token;
+        if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
+        } else {
+          next_token.set_string(norm_lower_token);
+        }
       }
     }
   }

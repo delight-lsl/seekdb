@@ -107,6 +107,12 @@ private:
   ObVector<ObFTRange, ObArenaAllocator> range_dicts_;
   ObFTCacheRangeContainer *range_container_; // only used to read cache
 
+  // Hint for find_first_char_range(): index of the range that served the
+  // previous character. Consecutive characters of a document almost always fall
+  // in the same range. This is only a cache: every use re-checks the range
+  // boundaries, so a stale value can never change the result.
+  mutable int64_t cached_range_idx_ = -1;
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFTRangeDict);
 };
