@@ -165,6 +165,28 @@ int ObStringDiffDecoder::batch_decode(
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (ctx.is_fix_length() && !ctx.has_extend_value() && !header_->is_hex_packing()
+        && string_size == 16 && header_->diff_desc_cnt_ == 3 && header_->length_ == 2
+        && !header_->diff_descs_[0].diff_ && header_->diff_descs_[1].diff_
+        && !header_->diff_descs_[2].diff_ && header_->diff_descs_[1].count_ == 2
+        && header_->diff_descs_[0].count_ + 2 + header_->diff_descs_[2].count_ == string_size) {
+      // For a short string with one two-byte differing run, prepare the common
+      // bytes once and write the completed string in one fixed-size copy.
+      char value[16];
+      const int64_t prefix_len = header_->diff_descs_[0].count_;
+      const int64_t suffix_len = header_->diff_descs_[2].count_;
+      const char *common = header_->common_data();
+      MEMCPY(value, common, prefix_len);
+      MEMCPY(value + prefix_len + 2, common + prefix_len, suffix_len);
+      char *str_ptr = buf;
+      for (int64_t i = 0; i < row_cap; ++i, str_ptr += buf_size) {
+        const unsigned char *cell_data = col_data + static_cast<int64_t>(row_ids[i]) * 2;
+        MEMCPY(value + prefix_len, cell_data, 2);
+        MEMCPY(str_ptr, value, sizeof(value));
+        datums[i].pack_ = string_size;
+        datums[i].ptr_ = str_ptr;
+      }
+      return ret;
     } else {
       for (int64_t i = 0; i < row_cap; ++i) {
         header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
