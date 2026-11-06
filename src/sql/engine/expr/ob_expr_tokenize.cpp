@@ -88,7 +88,8 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
+  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_,
+                                          param.uses_default_properties()))) {
   } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
   } else if (
       (0 != param.fulltext_.length())
@@ -126,6 +127,7 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
+    builtin_default_props_(false),
     output_mode_(OUTPUT_MODE::DEFAULT)
 {
 }
@@ -210,7 +212,8 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
+  } else if (!param.uses_default_properties()
+             && OB_FAIL(param.reform_parser_properties(param.properties_))) {
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
   }
   return ret;
@@ -229,6 +232,7 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
   } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
   } else {
     param.parser_name_ = ObString::make_string(parser_name_buf);
+    param.builtin_default_props_ = parser.is_ik() || parser.is_beng();
   }
   return ret;
 }

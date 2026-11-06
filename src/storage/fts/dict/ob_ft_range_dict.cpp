@@ -378,24 +378,6 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
-namespace
-{
-// Same result as ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, ...), which resolves the
-// collation and validates the arguments on every call. This runs for every
-// character of every token against every range boundary, so the lookup is skipped.
-inline int ft_utf8mb4_bin_cmp(const ObString &l, const ObString &r)
-{
-  const int64_t l_len = l.length();
-  const int64_t r_len = r.length();
-  const int64_t min_len = l_len < r_len ? l_len : r_len;
-  int cmp = 0;
-  if (min_len > 0) {
-    cmp = MEMCMP(l.ptr(), r.ptr(), min_len);
-  }
-  return 0 != cmp ? cmp : static_cast<int>(l_len - r_len);
-}
-} // namespace
-
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
@@ -406,14 +388,14 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
   // character, so this removes almost all of those comparisons.
   const int64_t cached = cached_range_idx_;
   if (OB_LIKELY(cached >= 0 && cached < range_dicts_.size())
-      && ft_utf8mb4_bin_cmp(range_dicts_[cached].start_.get_word(), single_word) <= 0
-      && ft_utf8mb4_bin_cmp(range_dicts_[cached].end_.get_word(), single_word) >= 0) {
+      && range_dicts_[cached].start_.get_word().compare(single_word) <= 0
+      && range_dicts_[cached].end_.get_word().compare(single_word) >= 0) {
     dict = range_dicts_[cached].dict_;
     found = true;
   }
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ft_utf8mb4_bin_cmp(range_dicts_[i].start_.get_word(), single_word) <= 0
-        && ft_utf8mb4_bin_cmp(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+    if (range_dicts_[i].start_.get_word().compare(single_word) <= 0
+        && range_dicts_[i].end_.get_word().compare(single_word) >= 0) {
       dict = range_dicts_[i].dict_;
       cached_range_idx_ = i;
       found = true;

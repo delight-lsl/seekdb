@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "config_bridge.h"
 #include "ob_ddl_resolver.h"
+#include "lib/cpu/ob_cpu_topology.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
@@ -7747,9 +7748,11 @@ int ObDDLResolver::set_partition_name_in_hashset(const ObPartitionNameHashWrappe
   return ret;
 }
 
-int ObDDLResolver::calc_ddl_parallelism(const uint64_t hint_parallelism, const uint64_t table_dop, uint64_t &parallelism)
+int ObDDLResolver::calc_ddl_parallelism(const uint64_t hint_parallelism, const uint64_t table_dop,
+                                       uint64_t &parallelism, bool &used_table_dop)
 {
   int ret = OB_SUCCESS;
+  used_table_dop = false;
   if (hint_parallelism > 1) {
     parallelism = hint_parallelism;
   } else {
@@ -7763,6 +7766,7 @@ int ObDDLResolver::calc_ddl_parallelism(const uint64_t hint_parallelism, const u
         if (OB_FAIL(session_info_->get_enable_parallel_ddl(enable_parallel_ddl))) {
         } else if (enable_parallel_ddl) {
           parallelism = table_dop;
+          used_table_dop = true;
         } else {
           parallelism = 1;
         }
@@ -7801,10 +7805,40 @@ int ObDDLResolver::resolve_hints(const ParseNode *node, ObDDLStmt &stmt, const O
     }
   }
   if (OB_SUCC(ret)) {
-    const int64_t table_dop = stmt::T_CREATE_INDEX == stmt.get_cmd_type() ? static_cast<ObCreateIndexStmt &>(stmt).get_index_dop() : table_schema.get_dop();
-    if (OB_FAIL(calc_ddl_parallelism(hint_parallel, table_dop, parallelism))) {
+    const bool create_index = stmt::T_CREATE_INDEX == stmt.get_cmd_type();
+    int64_t default_dop = create_index
+        ? static_cast<ObCreateIndexStmt &>(stmt).get_index_dop()
+        : table_schema.get_dop();
+    ObCreateIndexArg *default_fts_arg = nullptr;
+    if (OB_DEFAULT_TABLE_DOP == default_dop && !stmt.get_has_parallel_hint()) {
+      if (create_index) {
+        auto &index_arg = static_cast<ObCreateIndexStmt &>(stmt).get_create_index_arg();
+        if (INDEX_TYPE_FTS_INDEX_LOCAL == index_arg.index_type_) {
+          default_fts_arg = &index_arg;
+        }
+      } else if (stmt::T_ALTER_TABLE == stmt.get_cmd_type()) {
+        auto &alter_stmt = static_cast<ObAlterTableStmt &>(stmt);
+        const auto &indexes = alter_stmt.get_index_arg_list();
+        if (1 == alter_stmt.get_alter_table_action_count()
+            && 1 == indexes.count()
+            && INDEX_TYPE_FTS_INDEX_LOCAL == indexes.at(0)->index_type_) {
+          default_fts_arg = indexes.at(0);
+        }
+      }
+
+      if (nullptr != default_fts_arg) {
+        // The FTS build task splits this budget, so 12 allows a build DOP of up to 4.
+        constexpr int64_t FTS_DDL_DOP_CAP = 12;
+        default_dop = MAX(OB_DEFAULT_TABLE_DOP, MIN(FTS_DDL_DOP_CAP, get_cpu_count()));
+      }
+    }
+    bool used_table_dop = false;
+    if (OB_FAIL(calc_ddl_parallelism(hint_parallel, default_dop, parallelism, used_table_dop))) {
     } else {
       stmt.set_parallelism(parallelism);
+      if (nullptr != default_fts_arg && used_table_dop && parallelism > OB_DEFAULT_TABLE_DOP) {
+        default_fts_arg->preserve_rowkey_doc_order_ = true;
+      }
     }
   }
   return ret;

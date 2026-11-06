@@ -160,7 +160,8 @@ public:
   int init(
       common::ObIAllocator *allocator,
       const common::ObString &parser_name,
-      const common::ObString &parser_properties);
+      const common::ObString &parser_properties,
+      const bool default_tokenize_props = false);
   /**
    * Split document into multiple words
    *

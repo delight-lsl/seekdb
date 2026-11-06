@@ -28,6 +28,7 @@ namespace share
 
 const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "_aggregation_optimization_settings",
+  "_enable_fts_count_match_only",
   "_enable_parallel_ddl",
   "_enable_parallel_dml",
   "_enable_parallel_query",
@@ -752,6 +753,7 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
 
 const ObSysVarClassType ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR__AGGREGATION_OPTIMIZATION_SETTINGS,
+  SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY,
   SYS_VAR__ENABLE_PARALLEL_DDL,
   SYS_VAR__ENABLE_PARALLEL_DML,
   SYS_VAR__ENABLE_PARALLEL_QUERY,
@@ -2195,7 +2197,8 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "_push_join_predicate",
   "ob_sparse_drop_ratio_search",
   "enable_file_sql",
-  "ai_column_strict_read"
+  "ai_column_strict_read",
+  "_enable_fts_count_match_only"
 };
 
 bool ObSysVarMeta::sys_var_name_case_cmp(const char *name1, const ObString &name2)

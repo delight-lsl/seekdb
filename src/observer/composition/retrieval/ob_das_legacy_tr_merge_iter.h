@@ -108,6 +108,7 @@ private:
   int init_topk_limit();
   int init_block_max_iter_param();
   int init_doc_length_est_param();
+  bool need_inv_idx_agg() const { return !count_match_only_ && ir_ctdef_->need_inv_idx_agg(); }
 private:
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 private:
@@ -142,7 +143,8 @@ private:
       uint32_t topk_mode_             : 1;
       uint32_t daat_mode_             : 1;
       uint32_t taat_mode_             : 1;
-      uint32_t reserve                : 28;
+      uint32_t count_match_only_      : 1;
+      uint32_t reserve                : 27;
     };
     uint32_t flags_;
   };

@@ -65,6 +65,7 @@ private:
     // check and reform parser properties to standard format
     int reform_parser_properties(const ObString &properties);
     int try_load_dictionary_for_ik();
+    bool uses_default_properties() const { return builtin_default_props_ && properties_.empty(); }
 
   public:
     // for property and tmp json string
@@ -73,6 +74,7 @@ private:
     ObString properties_;
     ObObjMeta meta_;
     ObString fulltext_;
+    bool builtin_default_props_;
     enum OUTPUT_MODE
     {
       DEFAULT,

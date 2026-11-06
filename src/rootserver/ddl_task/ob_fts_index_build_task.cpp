@@ -675,6 +675,9 @@ int ObFtsIndexBuildTask::construct_rowkey_doc_arg(obcall::ObCreateIndexArg &arg)
   } else if (FALSE_IT(arg.index_option_.parser_name_.reset())) {
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(arg,
                                                                         &allocator_))) {
+  } else if (arg.preserve_rowkey_doc_order_) {
+    // DocIDs break ties in ranked retrieval. Keep their allocation in key order.
+    arg.parallelism_ = OB_DEFAULT_TABLE_DOP;
   }
   return ret;
 }

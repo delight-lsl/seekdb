@@ -74,6 +74,7 @@ const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {
   SYS_VAR_CARDINALITY_ESTIMATION_MODEL,        // cardinality_estimation_model
   SYS_VAR_DEFAULT_COLLATION_FOR_UTF8MB4,        // default_collation_for_utf8mb4
   SYS_VAR__PUSH_JOIN_PREDICATE,        // _push_join_predicate
+  SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY,        // _enable_fts_count_match_only
 };
 
 const int64_t ESSENTIAL_SYS_VARS_COUNT = sizeof(ESSENTIAL_SYS_VARS) / sizeof(ESSENTIAL_SYS_VARS[0]);
@@ -9937,13 +9938,26 @@ static struct VarsInit{
     ObSysVars[720].alias_ = "OB_SV_AI_COLUMN_STRICT_READ" ;
     }();
 
+    [&] (){
+      ObSysVars[721].default_value_ = "1" ;
+      ObSysVars[721].info_ = "Enable experimental match-only DAAT for eligible full-text COUNT queries" ;
+      ObSysVars[721].name_ = "_enable_fts_count_match_only" ;
+      ObSysVars[721].data_type_ = ObIntType ;
+      ObSysVars[721].flags_ = ObSysVarFlag::SESSION_SCOPE | ObSysVarFlag::INVISIBLE | ObSysVarFlag::INFLUENCE_PLAN ;
+      ObSysVars[721].id_ = SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY ;
+      cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY)) ;
+      ObSysVarsIdToArrayIdx[SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY] = 721 ;
+      ObSysVars[721].base_value_ = "1" ;
+    ObSysVars[721].alias_ = "OB_SV__ENABLE_FTS_COUNT_MATCH_ONLY" ;
+    }();
+
     if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) {
       HasInvalidSysVar = true;
     }
   }
 }vars_init;
 
-static int64_t var_amount = 721;
+static int64_t var_amount = 722;
 
 int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
 ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}

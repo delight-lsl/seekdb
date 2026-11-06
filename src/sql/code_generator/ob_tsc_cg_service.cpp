@@ -1789,6 +1789,30 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
   return ret;
 }
 
+static bool is_fts_count_filter(const ObDMLStmt *stmt, const ObRawExpr *match_filter,
+                                const ObMatchFunRawExpr *match_expr)
+{
+  if (nullptr == stmt || !stmt->is_select_stmt() || nullptr == match_filter
+      || T_OP_BOOL != match_filter->get_expr_type() || 1 != match_filter->get_param_count()
+      || match_expr != match_filter->get_param_expr(0)) {
+    return false;
+  }
+  const ObSelectStmt &select = *static_cast<const ObSelectStmt *>(stmt);
+  if (!select.is_single_table_stmt() || !select.get_table_item(0)->is_basic_table()
+      || 1 != select.get_condition_size() || match_filter != select.get_condition_expr(0)
+      || 1 != select.get_select_item_size() || 1 != select.get_aggr_items().count()
+      || !select.is_scala_group_by() || select.has_having() || select.has_order_by()
+      || select.has_limit() || select.is_distinct() || select.is_set_stmt()
+      || select.has_window_function() || select.has_for_update()
+      || !select.get_subquery_exprs().empty()) {
+    return false;
+  }
+  const ObAggFunRawExpr *count = select.get_aggr_items().at(0);
+  return nullptr != count && count == select.get_select_item(0).expr_
+      && T_FUN_COUNT == count->get_expr_type() && 0 == count->get_real_param_count()
+      && !count->is_param_distinct();
+}
+
 int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
                                            const DASScanCGCtx &cg_ctx,
                                            ObTableScanCtDef &tsc_ctdef,
@@ -1913,6 +1937,22 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
         }
       }
       index_back_doc_id_column = ir_scan_ctdef->inv_scan_domain_id_col_;
+    }
+  }
+
+  if (OB_SUCC(ret) && !cg_ctx.is_func_lookup_ && !cg_ctx.is_es_match_
+      && !cg_ctx.is_vec_iter_func_lookup_ && !cg_ctx.is_merge_fts_index_
+      && !op.use_index_merge() && !op.get_index_back() && !op.get_is_index_global()
+      && !scan_ctdef.table_param_.is_partition_table() && !tr_info.need_sort()
+      && NATURAL_LANGUAGE_MODE == match_against->get_mode_flag()
+      && match_against->get_columns_boosts().empty()
+      && is_fts_count_filter(op.get_stmt(), tr_info.pushdown_match_filter_, match_against)) {
+    bool enabled = false;
+    if (OB_FAIL(cg_.opt_ctx_->get_session_info()->get_sys_variable(
+            SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY, enabled))) {
+      LOG_WARN("failed to read full-text COUNT experiment switch", K(ret));
+    } else {
+      ir_scan_ctdef->count_match_only_candidate_ = enabled;
     }
   }
 

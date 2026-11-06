@@ -24,11 +24,12 @@ namespace oceanbase
 namespace storage
 {
 
-int ObSRDaaTInnerProductRelevanceCollector::init(int64_t should_match)
+int ObSRDaaTInnerProductRelevanceCollector::init(int64_t should_match, bool count_match_only)
 {
   int ret = OB_SUCCESS;
   total_relevance_ = 0.0;
   should_match_ = should_match;
+  count_match_only_ = count_match_only;
   return ret;
 }
 
@@ -55,8 +56,10 @@ int ObSRDaaTInnerProductRelevanceCollector::collect_one_dim(const int64_t dim_id
 int ObSRDaaTInnerProductRelevanceCollector::get_result(double &relevance, bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  relevance = total_relevance_;
   is_valid = matched_cnt_ >= should_match_;
+  // For unweighted natural-language MATCH, each posting contributes a strictly
+  // positive BM25 score. Preserve BOOL(MATCH) after applying the same match threshold.
+  relevance = count_match_only_ ? static_cast<double>(is_valid) : total_relevance_;
   total_relevance_ = 0.0;
   matched_cnt_ = 0;
   return ret;

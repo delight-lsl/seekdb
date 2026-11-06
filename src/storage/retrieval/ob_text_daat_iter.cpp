@@ -30,10 +30,11 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (!param.count_match_only_ && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    count_match_only_ = param.count_match_only_;
   }
   return ret;
 }
@@ -52,7 +53,7 @@ void ObTextDaaTIter::reset()
 
 void ObTextDaaTIter::reuse(const bool switch_tablet)
 {
-  if ((OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
+  if (count_match_only_ || (OB_NOT_NULL(dim_iters_) && 0 == dim_iters_->count())) {
     // do nothing
   } else {
     bm25_param_estimator_.reuse(switch_tablet);
@@ -70,7 +71,7 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (iter_param_->need_project_relevance()) {
+  } else if (!count_match_only_ && iter_param_->need_project_relevance()) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
     }
   }

@@ -67,7 +67,8 @@ struct ObDASTRMergeIterParam : public ObDASIterParam
       uint32_t topk_mode_             : 1;
       uint32_t daat_mode_             : 1;
       uint32_t taat_mode_             : 1;
-      uint32_t reserve                : 28;
+      uint32_t count_match_only_      : 1;
+      uint32_t reserve                : 27;
     };
     uint32_t flags_;
   };

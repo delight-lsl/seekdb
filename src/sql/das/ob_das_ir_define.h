@@ -191,7 +191,8 @@ public:
       uint8_t reserved_ir_scan_flag_:1;
       uint8_t has_block_max_scan_:1;
       uint8_t has_avg_doc_len_est_:1;
-      uint8_t reserved_:3;
+      uint8_t count_match_only_candidate_:1;
+      uint8_t reserved_:2;
     };
   };
   ObExpr *field_boost_expr_;

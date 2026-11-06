@@ -1383,7 +1383,8 @@ OB_SERIALIZE_MEMBER((ObCreateIndexArg, ObIndexArg),
                     is_index_scope_specified_,
                     is_offline_rebuild_,
                     index_key_,
-                    data_version_);
+                    data_version_,
+                    preserve_rowkey_doc_order_);
 
 
 

@@ -44,10 +44,11 @@ struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
   ObSRDaaTInnerProductRelevanceCollector() : ObSRDaaTRelevanceCollector(),
       total_relevance_(0),
       matched_cnt_(0),
-      should_match_(0) {}
+      should_match_(0),
+      count_match_only_(false) {}
   virtual ~ObSRDaaTInnerProductRelevanceCollector() {};
 
-  int init(int64_t should_match = 0);
+  int init(int64_t should_match = 0, bool count_match_only = false);
   virtual void reset() override;
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
@@ -56,6 +57,7 @@ private:
   double total_relevance_;
   int64_t matched_cnt_;
   int64_t should_match_;
+  bool count_match_only_;
 };
 
 struct ObSRDaaTBooleanRelevanceCollector : ObSRDaaTRelevanceCollector
