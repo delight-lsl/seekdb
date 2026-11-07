@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/optimizer/ob_optimizer_util.h"
+#include "sql/optimizer/ob_fts_bounded_count.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
@@ -177,10 +178,57 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         trans_happened |= is_happened;
       }
     }
-    if (OB_SUCC(ret)) {
-      if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
-      } else {
+    if (OB_SUCC(ret) && !stmt->get_match_exprs().empty()) {
+      ObDMLStmt *outer = 1 == parent_stmts.count() ? parent_stmts.at(0).stmt_ : nullptr;
+      const ObTableSchema *schema = nullptr;
+      bool count_match_only = false;
+      bool bounded = false;
+      if (is_fts_bounded_count(outer, stmt)) {
+        if (OB_FAIL(ctx_->session_info_->get_sys_variable(
+                SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY, count_match_only))) {
+        } else if (count_match_only && OB_FAIL(ctx_->sql_schema_guard_->get_table_schema(
+                       stmt->get_table_item(0)->ref_id_, schema))) {
+        } else if (nullptr != schema && !schema->is_partitioned_table()) {
+          ObPhysicalPlanCtx *plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx();
+          ObRawExpr *limit_expr = stmt->get_limit_expr();
+          ObRawExpr *offset_expr = stmt->get_offset_expr();
+          int64_t limit = 0;
+          int64_t offset = 0;
+          bool limit_null = false;
+          bool offset_null = false;
+          // Keep large and unresolved bounds on the original ranking path.
+          constexpr int64_t MAX_BOUNDED_COUNT_ROWS = 64 * 1024;
+          if (nullptr != plan_ctx
+              && OB_SUCCESS == ObTransformUtils::get_expr_int_value(
+                     limit_expr, &plan_ctx->get_param_store(), ctx_->exec_ctx_,
+                     ctx_->allocator_, limit, limit_null)
+              && OB_SUCCESS == ObTransformUtils::get_expr_int_value(
+                     offset_expr, &plan_ctx->get_param_store(), ctx_->exec_ctx_,
+                     ctx_->allocator_, offset, offset_null)
+              && !limit_null && !offset_null && limit >= 0 && offset >= 0
+              && limit <= MAX_BOUNDED_COUNT_ROWS && offset <= MAX_BOUNDED_COUNT_ROWS - limit) {
+            if (OB_FAIL(ObTransformUtils::add_const_param_constraints(limit_expr, ctx_))) {
+            } else if (nullptr != offset_expr &&
+                       OB_FAIL(ObTransformUtils::add_const_param_constraints(offset_expr, ctx_))) {
+            } else {
+              bounded = true;
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret) && bounded) {
+        // The parent observes only row count. The SQL limit still consumes offset and
+        // limit separately, after the full-text iterator merges and deduplicates DocIDs.
+        ObSqlBitSet<> removed;
+        const uint64_t view_id = outer->get_table_item(0)->table_id_;
+        if (OB_FAIL(removed.add_member(0))) {
+        } else if (OB_FAIL(ObTransformUtils::remove_select_items(
+                       ctx_, view_id, *static_cast<ObSelectStmt *>(stmt), *outer, removed))) {
+        } else {
+          trans_happened = true;
+        }
+      } else if (OB_SUCC(ret) && OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+      } else if (OB_SUCC(ret)) {
         trans_happened |= is_happened;
       }
     }

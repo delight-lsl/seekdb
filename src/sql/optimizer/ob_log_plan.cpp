@@ -18,6 +18,7 @@
 #include "config_bridge.h"
 #include "ob_log_plan.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
+#include "sql/optimizer/ob_fts_bounded_count.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join_filter.h"
@@ -6469,8 +6470,9 @@ int ObLogPlan::candi_allocate_limit(ObRawExpr *limit_expr,
 {
   int ret = OB_SUCCESS;
   ObRawExpr *pushed_expr = NULL;
-  if (NULL != limit_expr &&
-      OB_FAIL(ObTransformUtils::make_pushdown_limit_count(
+  if (NULL != limit_expr
+      && !is_fts_bounded_count(get_optimizer_context().get_root_stmt(), get_stmt())
+      && OB_FAIL(ObTransformUtils::make_pushdown_limit_count(
                                        get_optimizer_context().get_expr_factory(),
                                        *get_optimizer_context().get_session_info(),
                                        limit_expr,
@@ -6547,8 +6549,11 @@ int ObLogPlan::create_limit_plan(ObLogicalOperator *&top,
   } else {
     bool is_pushed = false;
     // for normal limit-offset case
-    if (NULL != limit_expr && !is_calc_found_rows && !is_fetch_with_ties &&
-        OB_FAIL(try_push_limit_into_table_scan(top,
+    // Keep the cap above the DocID union so the batch COUNT iterator can
+    // use the requested batch size without a per-posting limit.
+    if (NULL != limit_expr && !is_calc_found_rows && !is_fetch_with_ties
+        && !is_fts_bounded_count(get_optimizer_context().get_root_stmt(), get_stmt())
+        && OB_FAIL(try_push_limit_into_table_scan(top,
                                                limit_expr,
                                                pushed_expr,
                                                offset_expr,

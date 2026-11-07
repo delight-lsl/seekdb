@@ -20,6 +20,7 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/das/ob_domain_id.h"
+#include "sql/optimizer/ob_fts_bounded_count.h"
 namespace oceanbase
 {
 
@@ -1946,7 +1947,9 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       && !scan_ctdef.table_param_.is_partition_table() && !tr_info.need_sort()
       && NATURAL_LANGUAGE_MODE == match_against->get_mode_flag()
       && match_against->get_columns_boosts().empty()
-      && is_fts_count_filter(op.get_stmt(), tr_info.pushdown_match_filter_, match_against)) {
+      && (is_fts_count_filter(op.get_stmt(), tr_info.pushdown_match_filter_, match_against)
+          || (is_fts_bounded_count(cg_.opt_ctx_->get_root_stmt(), op.get_stmt())
+              && op.get_stmt()->get_condition_expr(0) == tr_info.pushdown_match_filter_))) {
     bool enabled = false;
     if (OB_FAIL(cg_.opt_ctx_->get_session_info()->get_sys_variable(
             SYS_VAR__ENABLE_FTS_COUNT_MATCH_ONLY, enabled))) {
