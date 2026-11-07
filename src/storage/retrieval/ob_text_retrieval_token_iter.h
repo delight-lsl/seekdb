@@ -132,6 +132,8 @@ public:
   virtual int advance_to(const ObDatum &id_datum) override;
   virtual int get_curr_score(double &score) const override;
   virtual int get_curr_id(const ObDatum *&id_datum) const override;
+  int peek_doc_ids(const ObDocIdExt *&begin, const ObDocIdExt *&end);
+  void consume_doc_ids(const int64_t count) { cur_idx_ += count; }
 public:
   int get_token_doc_cnt(int64_t &token_doc_cnt) const { return token_iter_->get_token_doc_cnt(token_doc_cnt); }
   virtual int get_dim_max_score(double &score) override {
@@ -151,6 +153,7 @@ private:
   sql::ObExpr *relevance_expr_;
   sql::ObExpr *inv_scan_domain_id_col_;
   int64_t max_batch_size_;
+  static constexpr int64_t DOC_ID_STREAM_END = -2;
   int64_t cur_idx_;
   int64_t count_;
   ObFixedArray<double, ObIAllocator> relevance_; // when ~ObFixedArray(), wikll destory itself

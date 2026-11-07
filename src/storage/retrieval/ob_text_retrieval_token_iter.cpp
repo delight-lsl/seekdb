@@ -496,6 +496,27 @@ int ObTextRetrievalDaaTTokenIter::get_next_row() {
   return ret;
 }
 
+int ObTextRetrievalDaaTTokenIter::peek_doc_ids(const ObDocIdExt *&begin, const ObDocIdExt *&end)
+{
+  int ret = OB_SUCCESS;
+  begin = end = nullptr;
+  if (cur_idx_ == DOC_ID_STREAM_END) {
+    ret = OB_ITER_END;
+  } else if (cur_idx_ + 1 >= count_) {
+    if (OB_ITER_END == (ret = get_next_row())) {
+      cur_idx_ = DOC_ID_STREAM_END;
+    } else if (OB_SUCC(ret)) {
+      // get_next_row selected the first row. The view has not consumed it yet.
+      --cur_idx_;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    begin = doc_id_.get_data() + cur_idx_ + 1;
+    end = doc_id_.get_data() + count_;
+  }
+  return ret;
+}
+
 int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
 {
   int ret = OB_SUCCESS;

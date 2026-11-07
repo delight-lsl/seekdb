@@ -35,6 +35,7 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
     count_match_only_ = param.count_match_only_;
+    count_disjunction_ = param.count_disjunction_;
   }
   return ret;
 }
@@ -64,6 +65,111 @@ void ObTextDaaTIter::reuse(const bool switch_tablet)
     }
   }
   ObSRDaaTIterImpl::reuse(switch_tablet);
+}
+
+int ObTextDaaTIter::get_next_rows(const int64_t capacity, int64_t &count)
+{
+  if (IS_INIT && count_match_only_ && count_disjunction_ && !function_lookup_mode_
+      && dim_iters_->count() > 0 && dim_iters_->count() <= MAX_COUNT_STREAMS
+      && iter_param_->eval_ctx_->is_vectorized() && !iter_param_->limit_param_->is_valid()
+      && !iter_param_->need_filter() && OB_ISNULL(iter_param_->dim_weights_)
+      && common::ObVarcharType == iter_param_->id_proj_expr_->datum_meta_.type_
+      && common::CS_TYPE_BINARY == iter_param_->id_proj_expr_->datum_meta_.cs_type_
+      && capacity > 0) {
+    return get_next_count_rows(capacity, count);
+  }
+  return ObSRDaaTIterImpl::get_next_rows(capacity, count);
+}
+
+static int compare_count_doc_ids(const ObDatum &left, const ObDatum &right,
+                                 const ObCharsetInfo &charset)
+{
+  if (OB_UNLIKELY(left.is_null() || right.is_null())) {
+    return static_cast<int>(right.is_null()) - static_cast<int>(left.is_null());
+  }
+  const ObString lhs = left.get_string();
+  const ObString rhs = right.get_string();
+  // Equal lengths use the same unsigned byte order as the binary collation.
+  if (OB_LIKELY(lhs.length() == rhs.length())) {
+    return lhs.empty() ? 0 : MEMCMP(lhs.ptr(), rhs.ptr(), lhs.length());
+  }
+  return charset.coll->strnncollsp(&charset,
+      reinterpret_cast<const unsigned char *>(lhs.ptr()), lhs.length(),
+      reinterpret_cast<const unsigned char *>(rhs.ptr()), rhs.length(), false);
+}
+
+int ObTextDaaTIter::get_next_count_rows(const int64_t capacity, int64_t &count)
+{
+  struct Cursor {
+    ObTextRetrievalDaaTTokenIter *iter_ = nullptr;
+    const ObDocIdExt *start_ = nullptr;
+    const ObDocIdExt *head_ = nullptr;
+    const ObDocIdExt *end_ = nullptr;
+    bool exhausted_ = false;
+  };
+  int ret = OB_SUCCESS;
+  count = 0;
+  const int64_t stream_count = dim_iters_->count();
+  const int64_t output_capacity = MIN(capacity, iter_param_->max_batch_size_);
+  const ObCharsetInfo &charset = *ObCharset::get_charset(common::CS_TYPE_BINARY);
+  Cursor cursors[MAX_COUNT_STREAMS];
+  for (int64_t i = 0; OB_SUCC(ret) && i < stream_count; ++i) {
+    cursors[i].iter_ = static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(i));
+    if (OB_ISNULL(cursors[i].iter_)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+
+  // Merge the sorted term batches. A view stays valid until its own stream refills.
+  while (OB_SUCC(ret) && count < output_capacity) {
+    const ObDatum *first = nullptr;
+    unsigned int matching = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < stream_count; ++i) {
+      Cursor &cursor = cursors[i];
+      if (!cursor.exhausted_ && cursor.head_ == cursor.end_) {
+        if (OB_NOT_NULL(cursor.start_)) {
+          cursor.iter_->consume_doc_ids(cursor.head_ - cursor.start_);
+        }
+        if (OB_ITER_END == (ret = cursor.iter_->peek_doc_ids(cursor.head_, cursor.end_))) {
+          ret = OB_SUCCESS;
+          cursor.exhausted_ = true;
+        }
+        cursor.start_ = cursor.head_;
+      }
+      if (OB_SUCC(ret) && !cursor.exhausted_) {
+        const ObDatum &id = cursor.head_->get_datum();
+        const int cmp = OB_ISNULL(first) ? -1 : compare_count_doc_ids(id, *first, charset);
+        if (cmp < 0) {
+          first = &id;
+          matching = 1U << i;
+        } else if (cmp == 0) {
+          matching |= 1U << i;
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(first)) {
+        ret = OB_ITER_END;
+      } else if (OB_FAIL(cache_result(count, *first, 1.0))) {
+        LOG_WARN("failed to cache fulltext count match", K(ret));
+      } else {
+        for (int64_t i = 0; i < stream_count; ++i) {
+          if ((matching & (1U << i)) != 0) {
+            ++cursors[i].head_;
+          }
+        }
+      }
+    }
+  }
+  for (int64_t i = 0; i < stream_count; ++i) {
+    Cursor &cursor = cursors[i];
+    if (OB_NOT_NULL(cursor.start_)) {
+      cursor.iter_->consume_doc_ids(cursor.head_ - cursor.start_);
+    }
+  }
+  if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0 && OB_FAIL(project_results(count))) {
+  }
+  return ret;
 }
 
 int ObTextDaaTIter::pre_process()
